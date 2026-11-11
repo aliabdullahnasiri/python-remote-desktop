@@ -25,14 +25,17 @@ Run commands from the project root:
 uv run rdc --help
 uv run rdc version
 uv run rdc devices
-uv run rdc capture --monitor 1 --fps 15 --duration 10 --snapshot first-frame.jpg
+uv run rdc capture --monitor 1 --fps 15 --duration 10
 ```
 
 Monitor indexes follow `mss`: index `0` is the combined virtual desktop; `1..N`
 are individual monitors. Use `rdc devices` to see the available indexes.
 
 `capture` runs locally and prints capture statistics. Press Ctrl+C to stop.
-The optional `--snapshot` saves the first captured frame as a JPEG.
+Every captured frame is saved as a JPEG in `screenshots/<session-id>/`, named
+`frame_000001.jpg`, `frame_000002.jpg`, and so on. Each run creates a separate
+session folder to avoid overwriting earlier captures. The `screenshots/` folder
+is ignored by Git.
 
 ## Low-bandwidth profile
 

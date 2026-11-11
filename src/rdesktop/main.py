@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from uuid import uuid4
 from pathlib import Path
 
 import typer
@@ -61,9 +62,6 @@ def capture(
     duration: float = typer.Option(
         0.0, min=0.0, help="Seconds to capture; 0 means until Ctrl+C."
     ),
-    snapshot: Path | None = typer.Option(
-        None, help="Optional path for saving the first captured frame."
-    ),
 ) -> None:
     """Capture the local screen and report performance (no network streaming yet)."""
     settings = CaptureSettings(max_fps=fps)
@@ -75,6 +73,9 @@ def capture(
 
     try:
         with ScreenCapture(settings) as screen:
+            output_dir = Path("screenshots") / uuid4().hex
+            output_dir.mkdir(parents=True, exist_ok=False)
+            console.print(f"Saving frames to: {output_dir.resolve()}")
             console.print(
                 f"Capture active — monitor {monitor}, max {fps} FPS, "
                 f"up to {settings.max_width}×{settings.max_height}. "
@@ -86,10 +87,11 @@ def capture(
                 frame = screen.capture(monitor)
                 frames += 1
 
-                if snapshot is not None and frames == 1:
-                    snapshot.parent.mkdir(parents=True, exist_ok=True)
-                    frame.image.save(snapshot, format="JPEG", quality=settings.jpeg_quality)
-                    console.print(f"First frame saved to: {snapshot.resolve()}")
+                frame.image.save(
+                    output_dir / f"frame_{frames:06d}.jpg",
+                    format="JPEG",
+                    quality=settings.jpeg_quality,
+                )
 
                 now = time.perf_counter()
                 if now - last_report >= 1.0:
