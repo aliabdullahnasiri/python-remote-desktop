@@ -1,8 +1,9 @@
-# Python Remote Desktop — Local Capture and Playback (Phases 1–4)
+# Python Remote Desktop — Capture, Playback and Signaling (Phases 1–5)
 
 A cross-platform starting point for an authorized remote-desktop application.
-This milestone implements the CLI, local screen capture, H.264 recording, and local playback. It does **not**
-implement networking, remote input, persistence, or unattended access.
+This milestone implements the CLI, local screen capture, H.264 recording, local
+playback, and an approval-gated WebSocket signaling server. WebRTC video
+transport and remote input are not implemented yet.
 
 ## Requirements
 
@@ -54,6 +55,19 @@ A graphical desktop and Tkinter are required for playback. On Arch Linux install
 `tk`; on Debian/Ubuntu install `python3-tk`. Windows Python installations should
 include the Tcl/Tk component. Playback does not require access to screen capture.
 
+## Signaling server
+
+Generate a random server token, set it as `RDC_SIGNALING_TOKEN`, then run:
+
+```bash
+uv run rdc serve --host 127.0.0.1 --port 8000
+```
+
+The FastAPI server provides `GET /health` and `/ws` for authenticated host/viewer
+pairing, host approval, and SDP/ICE exchange. See [the signaling protocol](docs/signaling.md)
+for Linux/Windows setup, message examples, deployment requirements, and limits.
+This phase provides the server; host/viewer WebRTC clients come next.
+
 ## Low-bandwidth profile
 
 The default profile is capped at 15 frames per second and scales frames down
@@ -84,7 +98,8 @@ For Linux, run PyInstaller on Linux; for Windows, run it on Windows.
 - Phase 2: monitor enumeration, frame capture, downscaling and capture statistics.
 - Phase 3: local H.264/MP4 recording with PyAV.
 - Phase 4: timestamp-paced local video playback with pause/resume and resizing.
-- Not included yet: WebRTC signaling, video transport, remote keyboard/mouse,
+- Phase 5: authenticated FastAPI signaling with host approval and session cleanup.
+- Not included yet: WebRTC video transport, remote keyboard/mouse,
   authentication service, or background service installation.
 
 The host must clearly show that screen sharing is active and require approval
