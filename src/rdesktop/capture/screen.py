@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Self
 
 from PIL import Image
 
@@ -47,7 +47,7 @@ class ScreenCapture:
         self.settings.validate()
         self._mss: Any | None = None
 
-    def __enter__(self) -> "ScreenCapture":
+    def __enter__(self) -> Self:
         self.start()
         return self
 
@@ -60,13 +60,16 @@ class ScreenCapture:
 
         # On Linux, mss commonly uses X11. Wayland sessions may require
         # PipeWire/desktop-portal capture instead.
-        if os.name == "posix" and os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland":
-            if not os.environ.get("DISPLAY"):
-                raise RuntimeError(
-                    "A Wayland session without XWayland DISPLAY was detected. "
-                    "This mss backend cannot capture it; a PipeWire/desktop-portal "
-                    "backend is needed for native Wayland capture."
-                )
+        if (
+            os.name == "posix"
+            and os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
+            and not os.environ.get("DISPLAY")
+        ):
+            raise RuntimeError(
+                "A Wayland session without XWayland DISPLAY was detected. "
+                "This mss backend cannot capture it; a PipeWire/desktop-portal "
+                "backend is needed for native Wayland capture."
+            )
 
         try:
             import mss
