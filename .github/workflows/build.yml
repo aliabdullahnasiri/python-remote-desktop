@@ -1,0 +1,102 @@
+name: Build and release
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux-x64
+          - os: windows-2022
+            platform: windows-x64
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          architecture: x64
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install Linux GUI libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk libx11-6
+      - name: Install locked dependencies
+        run: uv sync --locked --extra dev --python "$(which python)"
+      - name: Check Tkinter support
+        run: uv run --no-sync python -c "import tkinter; print(tkinter.Tcl().eval('info patchlevel'))"
+      - name: Run tests
+        run: uv run --no-sync pytest -q
+      - name: Build executable
+        run: uv run --no-sync pyinstaller --clean --noconfirm rdc.spec
+      - name: Smoke test executable
+        run: uv run --no-sync python scripts/smoke_build.py
+      - name: Package Linux executable
+        if: runner.os == 'Linux'
+        run: tar -czf dist/rdc-linux-x64.tar.gz -C dist rdc
+      - name: Package Windows executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist/rdc.exe -DestinationPath dist/rdc-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rdc-${{ matrix.platform }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish tagged release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: rdc-*
+          merge-multiple: true
+          path: artifacts
+      - name: Publish archives and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        working-directory: artifacts
+        shell: bash
+        run: |
+          sha256sum rdc-linux-x64.tar.gz rdc-windows-x64.zip > SHA256SUMS.txt
+          if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --generate-notes --draft
+          fi
+          gh release upload "$RELEASE_TAG" rdc-linux-x64.tar.gz rdc-windows-x64.zip SHA256SUMS.txt --clobber
+          gh release edit "$RELEASE_TAG" --draft=false
