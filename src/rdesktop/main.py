@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import Annotated
 from uuid import uuid4
 
 import typer
@@ -124,7 +125,9 @@ def capture(
 
 @app.command()
 def encode(
-    output: Path = typer.Option(Path("recording.mp4"), help="Local .mp4 output path."),
+    output: Annotated[Path, typer.Option(help="Local .mp4 output path.")] = Path(
+        "recording.mp4"
+    ),
     monitor: int = typer.Option(
         1, min=0, help="Monitor index; 0 is the virtual desktop."
     ),
@@ -188,7 +191,16 @@ def encode(
 
 @app.command()
 def view(
-    video: Path = typer.Argument(..., exists=True, file_okay=True, dir_okay=False, readable=True, help="Local video file to play."),
+    video: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+            help="Local video file to play.",
+        ),
+    ],
 ) -> None:
     """Play a local recording. Space pauses; Escape closes the window."""
     from rdesktop.viewer.player import play_video
@@ -203,6 +215,36 @@ def view(
         console.print(f"[red]Playback failed:[/red] {exc}")
         raise typer.Exit(code=1) from exc
     console.print(f"Viewer closed. Displayed {frames} frames.")
+
+
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", help="Signaling bind address."),
+    port: int = typer.Option(8000, min=1, max=65535, help="Signaling port."),
+) -> None:
+    """Start the signaling server (requires RDC_SIGNALING_TOKEN)."""
+    import os
+
+    import uvicorn
+
+    from rdesktop.server.app import create_app
+
+    if len(os.environ.get("RDC_SIGNALING_TOKEN", "")) < 32:
+        console.print(
+            "[red]Set RDC_SIGNALING_TOKEN to a random token of at least 32 characters.[/red]"
+        )
+        raise typer.Exit(code=1)
+    uvicorn.run(
+        create_app(),
+        host=host,
+        port=port,
+        workers=1,
+        ws="websockets",
+        ws_max_size=65536,
+        ws_max_queue=16,
+        ws_ping_interval=20,
+        ws_ping_timeout=20,
+    )
 
 
 if __name__ == "__main__":
