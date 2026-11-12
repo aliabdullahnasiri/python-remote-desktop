@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import time
-from uuid import uuid4
 from pathlib import Path
+from uuid import uuid4
 
 import typer
 from rich.console import Console
@@ -12,6 +12,7 @@ from rich.table import Table
 
 from rdesktop import __version__
 from rdesktop.capture.screen import ScreenCapture
+from rdesktop.codec.video_encoder import H264Encoder
 from rdesktop.config import CaptureSettings
 
 app = typer.Typer(
@@ -44,7 +45,9 @@ def devices() -> None:
     table.add_column("Description")
 
     for index, monitor in enumerate(monitors):
-        description = "Virtual desktop (all monitors)" if index == 0 else f"Monitor {index}"
+        description = (
+            "Virtual desktop (all monitors)" if index == 0 else f"Monitor {index}"
+        )
         table.add_row(
             str(index),
             f"{monitor['left']}, {monitor['top']}",
@@ -57,7 +60,9 @@ def devices() -> None:
 
 @app.command()
 def capture(
-    monitor: int = typer.Option(1, min=0, help="Monitor index; 0 is the virtual desktop."),
+    monitor: int = typer.Option(
+        1, min=0, help="Monitor index; 0 is the virtual desktop."
+    ),
     fps: int = typer.Option(15, min=1, max=15, help="Capture limit (1–15 FPS)."),
     duration: float = typer.Option(
         0.0, min=0.0, help="Seconds to capture; 0 means until Ctrl+C."
@@ -115,6 +120,70 @@ def capture(
 
     elapsed = max(time.perf_counter() - started, 0.001)
     console.print(f"Stopped. Captured {frames} frames in {elapsed:.1f}s.")
+
+
+@app.command()
+def encode(
+    output: Path = typer.Option(Path("recording.mp4"), help="Local .mp4 output path."),
+    monitor: int = typer.Option(
+        1, min=0, help="Monitor index; 0 is the virtual desktop."
+    ),
+    fps: int = typer.Option(15, min=1, max=15, help="Frames per second (1–15)."),
+    duration: float = typer.Option(
+        10.0, min=0.0, help="Recording duration in seconds; 0 until Ctrl+C."
+    ),
+    bitrate: int = typer.Option(
+        800_000, min=100_000, max=5_000_000, help="Target bitrate in bits/sec."
+    ),
+) -> None:
+    """Record the local screen to H.264 / MP4. No networking or remote control."""
+    settings = CaptureSettings(max_fps=fps)
+    frame_interval = 1.0 / fps
+    started = time.perf_counter()
+    deadline = started + duration if duration > 0 else None
+    encoded = 0
+    next_report = started + 1
+
+    console.print(
+        f"[bold yellow]Local screen recording ACTIVE[/bold yellow] "
+        f"| monitor {monitor} | {fps} FPS | {bitrate:,} bps | {output}"
+    )
+    console.print("Press Ctrl+C to finish and save the recording.")
+    try:
+        with (
+            ScreenCapture(settings) as capture,
+            H264Encoder(output, fps=fps, bitrate=bitrate) as encoder,
+        ):
+            # Validate monitor upfront, before initializing an output file.
+            monitors = capture.monitors()
+            if not 0 <= monitor < len(monitors):
+                raise ValueError(f"Monitor {monitor} is unavailable. Run: rdc devices")
+            while deadline is None or time.perf_counter() < deadline:
+                tick = time.perf_counter()
+                frame = capture.capture(monitor)
+                encoder.write(frame.image)
+                encoded += 1
+                now = time.perf_counter()
+                if now >= next_report:
+                    console.print(
+                        f"Encoded {encoded} frames | {encoded / max(now-started, 0.001):.1f} FPS"
+                    )
+                    next_report = now + 1.0
+                delay = frame_interval - (time.perf_counter() - tick)
+                if delay > 0:
+                    time.sleep(delay)
+    except KeyboardInterrupt:
+        console.print("Stopping local recording...")
+    except Exception as exc:
+        console.print(f"[red]Encoding failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if encoded:
+        console.print(
+            f"[green]Saved {encoded} encoded frames to {output.resolve()}[/green]"
+        )
+    else:
+        console.print("No frames were captured. No video was created.")
 
 
 if __name__ == "__main__":
