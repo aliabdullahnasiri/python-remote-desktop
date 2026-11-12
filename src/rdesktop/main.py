@@ -247,5 +247,84 @@ def serve(
     )
 
 
+def _run_stream(
+    *,
+    hosting: bool,
+    server: str,
+    monitor: int = 1,
+    fps: int = 15,
+    session_id: str = "",
+    name: str = "Viewer",
+) -> None:
+    import asyncio
+    import os
+
+    from rdesktop.network.options import (
+        ice_configuration,
+        signaling_token,
+        validate_url,
+    )
+    from rdesktop.network.peer import PeerSession
+    from rdesktop.viewer.live import LiveViewer
+
+    try:
+        token = signaling_token()
+        validate_url(server)
+        configuration = ice_configuration()
+        join_token = ""
+        if not hosting:
+            join_token = os.environ.get("RDC_JOIN_TOKEN", "") or typer.prompt(
+                "Session join token", hide_input=True
+            )
+        viewer = None if hosting else LiveViewer()
+        session = PeerSession(
+            host=hosting,
+            server=server,
+            token=token,
+            configuration=configuration,
+            monitor=monitor,
+            fps=fps,
+            session_id=session_id,
+            join_token=join_token,
+            name=name,
+            report=lambda message: console.print(message, markup=False),
+            on_frame=viewer.show if viewer is not None else None,
+        )
+        asyncio.run(session.run(viewer.run if viewer is not None else None))
+    except KeyboardInterrupt:
+        console.print("Session stopped.")
+    except Exception as exc:
+        console.print(f"Streaming failed: {exc}", markup=False)
+        raise typer.Exit(code=1) from exc
+
+
+@app.command()
+def host(
+    server: Annotated[
+        str, typer.Option(help="Signaling WebSocket URL.")
+    ] = "ws://127.0.0.1:8000/ws",
+    monitor: Annotated[
+        int, typer.Option(min=0, help="Monitor index; 0 shares all monitors.")
+    ] = 1,
+    fps: Annotated[int, typer.Option(min=1, max=15, help="Maximum capture FPS.")] = 15,
+) -> None:
+    """Share your screen after approving one viewer in this terminal."""
+    _run_stream(hosting=True, server=server, monitor=monitor, fps=fps)
+
+
+@app.command()
+def connect(
+    session_id: Annotated[str, typer.Argument(help="Session ID printed by the host.")],
+    server: Annotated[
+        str, typer.Option(help="Signaling WebSocket URL.")
+    ] = "ws://127.0.0.1:8000/ws",
+    name: Annotated[
+        str, typer.Option(help="Viewer label shown in the host approval prompt.")
+    ] = "Viewer",
+) -> None:
+    """View an approved live screen; prompts for the session join token."""
+    _run_stream(hosting=False, server=server, session_id=session_id, name=name)
+
+
 if __name__ == "__main__":
     app()
