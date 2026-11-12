@@ -50,12 +50,25 @@ def main() -> None:
                     "Frozen server did not become healthy within 60 seconds"
                 )
         finally:
-            server.terminate()
-            try:
+            if os.name == "nt":
+                # A PyInstaller onefile executable has a bootloader parent and
+                # an application child. terminate() only kills the parent on
+                # Windows, leaving the child holding the temporary cwd open.
+                # Kill the tree while the parent still exists to identify it.
+                if server.poll() is None:
+                    subprocess.run(
+                        ["taskkill", "/PID", str(server.pid), "/T", "/F"],
+                        check=True,
+                        timeout=30,
+                    )
                 server.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                server.kill()
-                server.wait(timeout=10)
+            else:
+                server.terminate()
+                try:
+                    server.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    server.kill()
+                    server.wait(timeout=10)
 
 
 if __name__ == "__main__":
