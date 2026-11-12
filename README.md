@@ -1,9 +1,9 @@
-# Python Remote Desktop — Capture, Playback and Signaling (Phases 1–5)
+# Python Remote Desktop — Approved Screen Streaming (Phases 1–6)
 
 A cross-platform starting point for an authorized remote-desktop application.
 This milestone implements the CLI, local screen capture, H.264 recording, local
-playback, and an approval-gated WebSocket signaling server. WebRTC video
-transport and remote input are not implemented yet.
+playback, an approval-gated WebSocket signaling server, and live WebRTC screen
+streaming. Remote keyboard and mouse control are not implemented yet.
 
 ## Requirements
 
@@ -66,7 +66,25 @@ uv run rdc serve --host 127.0.0.1 --port 8000
 The FastAPI server provides `GET /health` and `/ws` for authenticated host/viewer
 pairing, host approval, and SDP/ICE exchange. See [the signaling protocol](docs/signaling.md)
 for Linux/Windows setup, message examples, deployment requirements, and limits.
-This phase provides the server; host/viewer WebRTC clients come next.
+The host and viewer use this server to establish an approved WebRTC session.
+
+## Live screen streaming
+
+Set the same `RDC_SIGNALING_TOKEN` on the server, host and viewer. Start the server,
+then run these commands in separate terminals:
+
+```bash
+# Host (shared computer)
+uv run rdc host --server ws://SERVER_IP:8000/ws --monitor 1 --fps 15
+
+# Viewer: use the host's session ID, then enter its join token when prompted
+uv run rdc connect SESSION_ID --server ws://SERVER_IP:8000/ws --name Alice
+```
+
+Type **y** at the host approval prompt to begin sharing. Close the viewer window,
+press **Escape**, or press **Ctrl+C** at the host to stop.
+See [the streaming guide](docs/streaming.md) for complete Windows PowerShell and
+Linux setup, firewall configuration, STUN/TURN, and current limitations.
 
 ## Low-bandwidth profile
 
@@ -99,7 +117,8 @@ For Linux, run PyInstaller on Linux; for Windows, run it on Windows.
 - Phase 3: local H.264/MP4 recording with PyAV.
 - Phase 4: timestamp-paced local video playback with pause/resume and resizing.
 - Phase 5: authenticated FastAPI signaling with host approval and session cleanup.
-- Not included yet: WebRTC video transport, remote keyboard/mouse,
+- Phase 6: approved H.264 WebRTC screen sharing with a live viewer.
+- Not included yet: remote keyboard/mouse,
   authentication service, or background service installation.
 
 The host must clearly show that screen sharing is active and require approval
