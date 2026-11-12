@@ -98,17 +98,42 @@ not yet a network bitrate guarantee.
 uv run pytest
 ```
 
-## Build a Windows executable
+## Build Windows and Linux executables
 
-Build on Windows (PyInstaller is not a cross-compiler):
+The [GitHub Actions pipeline](.github/workflows/build.yml) runs on branch pushes,
+pull requests, version tags (`v*`), and manual runs from the Actions tab. Each run
+installs dependencies from `uv.lock`, runs the tests, and builds a standalone
+executable on Windows and Linux using Python 3.12 and [rdc.spec](rdc.spec).
+The frozen CLI and signaling server are smoke-tested before uploading artifacts.
 
-```powershell
-uv sync --extra dev
-uv run pyinstaller --clean --onefile --name rdc --paths src src/rdesktop/main.py
+Download `rdc-windows-x64` or `rdc-linux-x64` from the completed workflow's
+**Artifacts** section. Extract the archive and run `rdc.exe --help` on Windows or
+`./rdc --help` on Linux. Python does not need to be installed on the target machine.
+Linux builds target x86-64 systems with glibc 2.35 or newer (Ubuntu 22.04+);
+a graphical desktop and X11 libraries are still required for capture/playback.
+The builds do not add native Wayland capture support.
+
+To publish both archives and SHA-256 checksums to a GitHub release, push a version
+tag after committing the workflow (update the application version first):
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
-The output will be in `dist/rdc.exe`. Build separately on each target OS.
-For Linux, run PyInstaller on Linux; for Windows, run it on Windows.
+The release publishes only after both platform jobs succeed. It uses the built-in
+`GITHUB_TOKEN`; no personal access token is required. Executables are unsigned.
+
+For local builds, run these commands on the target OS (PyInstaller is not a
+cross-compiler). The build Python must include Tkinter:
+
+```bash
+uv sync --locked --extra dev
+uv run --no-sync pyinstaller --clean --noconfirm rdc.spec
+uv run --no-sync python scripts/smoke_build.py
+```
+
+The output is `dist/rdc.exe` on Windows and `dist/rdc` on Linux.
 
 ## Current milestone boundaries
 
