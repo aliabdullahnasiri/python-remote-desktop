@@ -23,19 +23,20 @@ def test_capture_saves_numbered_frames_in_separate_sessions(monkeypatch, tmp_pat
             self.frames += 1
             if self.frames > 2:
                 raise KeyboardInterrupt
-            return SimpleNamespace(image=Image.new('RGB', (2, 2)))
+            return SimpleNamespace(image=Image.new("RGB", (2, 2)))
 
-    monkeypatch.setattr(main, 'ScreenCapture', FakeCapture)
-    monkeypatch.setattr(main.time, 'sleep', lambda _: None)
+    monkeypatch.setattr(main, "ScreenCapture", FakeCapture)
+    monkeypatch.setattr(main.time, "sleep", lambda _: None)
     runner = CliRunner()
     for _ in range(2):
-        result = runner.invoke(main.app, ['capture'])
+        result = runner.invoke(main.app, ["capture"])
         assert result.exit_code == 0, result.output
-    sessions = list((tmp_path / 'screenshots').iterdir())
+    sessions = list((tmp_path / "screenshots").iterdir())
     assert len(sessions) == 2
     for session in sessions:
         assert sorted(p.name for p in session.iterdir()) == [
-            'frame_000001.jpg', 'frame_000002.jpg'
+            "frame_000001.jpg",
+            "frame_000002.jpg",
         ]
-        with Image.open(session / 'frame_000001.jpg') as image:
-            assert image.format == 'JPEG'
+        with Image.open(session / "frame_000001.jpg") as image:
+            assert image.format == "JPEG"
