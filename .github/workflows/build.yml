@@ -35,6 +35,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/setup-python@v6
+        id: python
         with:
           python-version: "3.12"
           architecture: x64
@@ -47,7 +48,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y python3-tk libx11-6
       - name: Install locked dependencies
-        run: uv sync --locked --extra dev --python "$(which python)"
+        env:
+          BUILD_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: uv sync --locked --extra dev --python "$BUILD_PYTHON"
       - name: Check Tkinter support
         run: uv run --no-sync python -c "import tkinter; print(tkinter.Tcl().eval('info patchlevel'))"
       - name: Run tests
