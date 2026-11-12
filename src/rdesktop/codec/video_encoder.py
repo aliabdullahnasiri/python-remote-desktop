@@ -8,12 +8,9 @@ from __future__ import annotations
 
 from fractions import Fraction
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any, Self
 
 from PIL import Image, ImageOps
-
-if TYPE_CHECKING:
-    import av
 
 
 class H264Encoder:
@@ -58,7 +55,7 @@ class H264Encoder:
         self._stream: Any = None
         self._closed = False
 
-    def __enter__(self) -> "H264Encoder":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_: object) -> None:
