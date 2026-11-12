@@ -12,6 +12,7 @@ def play_video(path: Path) -> int:
 
     try:
         import tkinter as tk
+
         from PIL import Image, ImageTk
     except ImportError as exc:
         raise RuntimeError(
@@ -31,7 +32,9 @@ def play_video(path: Path) -> int:
         try:
             root = tk.Tk()
         except tk.TclError as exc:
-            raise RuntimeError("Cannot open the viewer window. A graphical desktop is required.") from exc
+            raise RuntimeError(
+                "Cannot open the viewer window. A graphical desktop is required."
+            ) from exc
 
         root.title(f"rdc — {path.name} | Space: pause | Esc: close")
         root.geometry(f"{min(first.width, 1280)}x{min(first.height, 720)}")
@@ -47,15 +50,20 @@ def play_video(path: Path) -> int:
         index = 0
         errors = []
         current_image = None
+        photo: ImageTk.PhotoImage | None = None
 
         def render(event=None):
+            nonlocal photo
             if current_image is None:
                 return
             image = current_image.copy()
-            image.thumbnail((max(label.winfo_width(), 1), max(label.winfo_height(), 1)), Image.Resampling.BILINEAR)
+            image.thumbnail(
+                (max(label.winfo_width(), 1), max(label.winfo_height(), 1)),
+                Image.Resampling.BILINEAR,
+            )
+            # Keep a Python reference for as long as the frame is displayed.
             photo = ImageTk.PhotoImage(image, master=root)
             label.configure(image=photo)
-            label.image = photo  # Tk does not retain a Python reference.
 
         def pause(event=None):
             nonlocal paused_at, started
@@ -74,7 +82,11 @@ def play_video(path: Path) -> int:
                 if paused_at is not None:
                     root.after(20, tick)
                     return
-                timestamp = float(pending.time) - origin if pending.time is not None else index * interval
+                timestamp = (
+                    float(pending.time) - origin
+                    if pending.time is not None
+                    else index * interval
+                )
                 remaining = started + max(0, timestamp) - time.perf_counter()
                 if remaining > 0:
                     root.after(max(1, min(20, round(remaining * 1000))), tick)
@@ -90,7 +102,8 @@ def play_video(path: Path) -> int:
                     root.unbind("<space>")
                     return
                 root.after(1, tick)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
+                # Transfer callback failures to the caller after closing the window.
                 errors.append(exc)
                 root.quit()
 
