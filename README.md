@@ -1,7 +1,7 @@
-# Python Remote Desktop — Foundation (Phases 1–2)
+# Python Remote Desktop — Local Capture and Playback (Phases 1–4)
 
 A cross-platform starting point for an authorized remote-desktop application.
-This milestone implements the CLI and local screen capture only. It does **not**
+This milestone implements the CLI, local screen capture, H.264 recording, and local playback. It does **not**
 implement networking, remote input, persistence, or unattended access.
 
 ## Requirements
@@ -37,6 +37,23 @@ Every captured frame is saved as a JPEG in `screenshots/<session-id>/`, named
 session folder to avoid overwriting earlier captures. The `screenshots/` folder
 is ignored by Git.
 
+## Record and play video
+
+```bash
+uv run rdc encode --duration 10 --output recording.mp4
+uv run rdc view recording.mp4
+```
+
+The viewer decodes the first video stream with PyAV and displays it in a
+resizable Tkinter window, preserving its aspect ratio. Playback follows video
+timestamps. Press **Space** to pause/resume and **Escape** to close, or use the
+window close button. The last frame remains visible when playback finishes.
+Audio and seeking are not supported in this milestone.
+
+A graphical desktop and Tkinter are required for playback. On Arch Linux install
+`tk`; on Debian/Ubuntu install `python3-tk`. Windows Python installations should
+include the Tcl/Tk component. Playback does not require access to screen capture.
+
 ## Low-bandwidth profile
 
 The default profile is capped at 15 frames per second and scales frames down
@@ -65,6 +82,8 @@ For Linux, run PyInstaller on Linux; for Windows, run it on Windows.
 
 - Phase 1: Typer CLI, command layout, configuration, errors and tests.
 - Phase 2: monitor enumeration, frame capture, downscaling and capture statistics.
+- Phase 3: local H.264/MP4 recording with PyAV.
+- Phase 4: timestamp-paced local video playback with pause/resume and resizing.
 - Not included yet: WebRTC signaling, video transport, remote keyboard/mouse,
   authentication service, or background service installation.
 

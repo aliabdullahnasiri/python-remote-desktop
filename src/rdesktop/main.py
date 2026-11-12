@@ -186,5 +186,24 @@ def encode(
         console.print("No frames were captured. No video was created.")
 
 
+@app.command()
+def view(
+    video: Path = typer.Argument(..., exists=True, file_okay=True, dir_okay=False, readable=True, help="Local video file to play."),
+) -> None:
+    """Play a local recording. Space pauses; Escape closes the window."""
+    from rdesktop.viewer.player import play_video
+
+    console.print("Local playback | Space: pause/resume | Escape: close")
+    try:
+        frames = play_video(video)
+    except KeyboardInterrupt:
+        console.print("Playback stopped.")
+        return
+    except Exception as exc:
+        console.print(f"[red]Playback failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    console.print(f"Viewer closed. Displayed {frames} frames.")
+
+
 if __name__ == "__main__":
     app()
