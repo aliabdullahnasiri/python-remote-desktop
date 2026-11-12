@@ -1,6 +1,6 @@
 # Phase 5: signaling protocol
 
-The server exchanges connection metadata for a future aiortc host/viewer.
+The server exchanges connection metadata for the aiortc host/viewer clients.
 It does not capture screens, carry video, or execute keyboard/mouse commands.
 One session contains one host and at most one viewer.
 
@@ -59,8 +59,8 @@ the WebSocket handshake.
    `{"type":"session_closed","reason":"rejected"}`.
 
 The viewer name is a self-reported label, not a verified identity.
-The server enforces that only the host socket can approve. The interactive
-host prompt will be part of the client implementation in Phase 6.
+The server enforces that only the host socket can approve. The `rdc host` client asks for approval in its local terminal; see the
+[streaming guide](streaming.md).
 Approval here permits signaling only; it does not grant remote input permission.
 
 ## Negotiation messages
@@ -77,7 +77,7 @@ the same session. Clients cannot specify arbitrary recipients.
 An ICE candidate of null marks end-of-candidates. Omitted ICE fields default to
 null and are included in forwarded messages. The initial offer/answer exchange
 is supported once per session; renegotiation requires a new session.
-SDP/candidate syntax is interpreted by the future WebRTC clients.
+SDP/candidate syntax is interpreted by the WebRTC clients.
 
 Send `{"type":"ping"}` periodically (for example every 60 seconds) from
 **each client** to receive `{"type":"pong"}` and keep that client's signaling
