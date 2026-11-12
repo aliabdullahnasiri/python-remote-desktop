@@ -1,4 +1,5 @@
 """Phase 3: verify frame sizing and local H.264 MP4 output."""
+
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,7 @@ def test_h264_mp4_is_decodable(tmp_path: Path):
     av = pytest.importorskip("av", reason="PyAV is required for the integration test")
     try:
         av.Codec("libx264", "w")
-    except Exception:
+    except av.codec.codec.UnknownCodecError:
         pytest.skip("libx264 not available in this PyAV build")
 
     out = tmp_path / "test.mp4"
