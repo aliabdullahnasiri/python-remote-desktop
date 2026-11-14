@@ -1,5 +1,13 @@
 # Shared native build for Windows and Linux. Run on the target operating system.
+import sys
+
 from PyInstaller.utils.hooks import collect_submodules
+
+input_backend = (
+    "win32"
+    if sys.platform == "win32"
+    else "darwin" if sys.platform == "darwin" else "xorg"
+)
 
 a = Analysis(
     ["src/rdesktop/main.py"],
@@ -10,6 +18,7 @@ a = Analysis(
         + collect_submodules("uvicorn")
         + collect_submodules("av")
         + collect_submodules("aiortc")
+        + [f"pynput.keyboard._{input_backend}", f"pynput.mouse._{input_backend}"]
         + ["tkinter", "PIL.ImageTk"]
     ),
 )
