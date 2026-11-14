@@ -27,6 +27,7 @@ class ScreenVideoTrack(VideoStreamTrack):
         self.settings.validate()
         if monitor < 0:
             raise ValueError("Monitor index must be nonnegative.")
+        self.bounds: dict[str, int] = {}
         self.monitor = monitor
         self._factory = capture_factory
         self._executor = ThreadPoolExecutor(
@@ -46,6 +47,8 @@ class ScreenVideoTrack(VideoStreamTrack):
         self._capture.start()
         if not 0 <= self.monitor < len(self._capture.monitors()):
             raise ValueError(f"Monitor {self.monitor} is unavailable. Run: rdc devices")
+
+        self.bounds = self._capture.monitors()[self.monitor]
 
     async def start(self) -> None:
         if self._closed:
