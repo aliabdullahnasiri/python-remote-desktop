@@ -32,7 +32,10 @@ class FakeCapture(ScreenCapture):
         self.threads.append(threading.get_ident())
 
     def monitors(self) -> list[dict[str, int]]:
-        return [{}, {}]
+        return [
+            {"left": -321, "top": 0, "width": 321, "height": 181},
+            {"left": 0, "top": 0, "width": 321, "height": 181},
+        ]
 
     def capture(self, monitor_index: int = 1) -> CapturedFrame:
         self.threads.append(threading.get_ident())
@@ -102,7 +105,10 @@ def test_screen_track_pacing_dimensions_and_thread_affinity():
 
 
 @pytest.mark.parametrize("approved", [True, False])
-def test_real_webrtc_stream_requires_approval_and_cleans_up(signaling_server, approved):
+@pytest.mark.parametrize("control", [True, False])
+def test_real_webrtc_stream_requires_approval_and_cleans_up(
+    signaling_server, approved, control
+):
     async def run():
         loop = asyncio.get_running_loop()
         credentials = loop.create_future()
@@ -111,6 +117,20 @@ def test_real_webrtc_stream_requires_approval_and_cleans_up(signaling_server, ap
         received = asyncio.Event()
         captures: list[FakeCapture] = []
         frames = []
+        injected = []
+
+        class Backend:
+            def key(self, *args):
+                injected.append(("key", *args))
+
+            def button(self, *args):
+                injected.append(("button", *args))
+
+            def move(self, *args):
+                injected.append(("move", *args))
+
+            def scroll(self, *args):
+                injected.append(("scroll", *args))
 
         async def approve(name):
             assert name == "Test viewer"
@@ -134,6 +154,8 @@ def test_real_webrtc_stream_requires_approval_and_cleans_up(signaling_server, ap
             token=TOKEN,
             configuration=RTCConfiguration(iceServers=[]),
             approve=approve,
+            allow_control=control,
+            input_factory=Backend,
             report=lambda message: None,
             on_created=lambda session, token: credentials.set_result((session, token)),
             track_factory=lambda: ScreenVideoTrack(capture_factory=capture_factory),
@@ -157,6 +179,8 @@ def test_real_webrtc_stream_requires_approval_and_cleans_up(signaling_server, ap
             viewer_task = asyncio.create_task(viewer.run())
             await asyncio.wait_for(requested.wait(), 5)
             await asyncio.sleep(0.1)
+            assert not viewer.send_input({"type": "key", "key": "a", "down": True})
+            assert not injected
             assert not captures
             assert not frames
             decision.set()
@@ -167,9 +191,34 @@ def test_real_webrtc_stream_requires_approval_and_cleans_up(signaling_server, ap
                 assert frames[0].width == 320 and frames[0].height == 180
                 red, green, blue = frames[0].to_image().getpixel((100, 100))
                 assert red > 200 and green < 30 and blue < 30
+                event = {"type": "key", "key": "ctrl_l", "down": True}
+                assert viewer.send_input(event) is control
+                if control:
+                    viewer.send_input({"type": "move", "x": 1.0, "y": 1.0})
+                    viewer.send_input(
+                        {"type": "button", "button": "left", "down": True}
+                    )
+
+                    async def wait_input():
+                        while len(injected) < 3:
+                            await asyncio.sleep(0.01)
+
+                    await asyncio.wait_for(wait_input(), 3)
+                    assert injected == [
+                        ("key", "ctrl_l", True),
+                        ("move", 320, 180),
+                        ("button", "left", True),
+                    ]
                 viewer.stopped.set()
             await asyncio.wait_for(asyncio.gather(host_task, viewer_task), 5)
             if approved:
+                if control:
+                    assert injected[-2:] == [
+                        ("key", "ctrl_l", False),
+                        ("button", "left", False),
+                    ]
+                else:
+                    assert not injected
                 assert captures[0].closed
                 assert len(set(captures[0].threads)) == 1
             else:
