@@ -1,9 +1,9 @@
-# Python Remote Desktop — Approved Screen Streaming (Phases 1–6)
+# Python Remote Desktop — Approved Remote Desktop (Phases 1–7)
 
 A cross-platform starting point for an authorized remote-desktop application.
 This milestone implements the CLI, local screen capture, H.264 recording, local
 playback, an approval-gated WebSocket signaling server, and live WebRTC screen
-streaming. Remote keyboard and mouse control are not implemented yet.
+streaming with optional, explicitly approved remote keyboard and mouse control.
 
 ## Requirements
 
@@ -86,6 +86,23 @@ press **Escape**, or press **Ctrl+C** at the host to stop.
 See [the streaming guide](docs/streaming.md) for complete Windows PowerShell and
 Linux setup, firewall configuration, STUN/TURN, and current limitations.
 
+## Remote keyboard and mouse
+
+Start the host with control enabled:
+
+```bash
+uv run rdc host --server ws://SERVER_IP:8000/ws --allow-control
+```
+
+Connect normally. The host approval prompt explicitly includes keyboard/mouse
+access. Without `--allow-control`, the session remains view-only. The viewer title
+shows whether control is enabled. Click in the video and use the keyboard, mouse
+buttons, dragging, and vertical wheel scrolling. **Escape** disconnects locally;
+**Ctrl+C in the host terminal** ends sharing and revokes control.
+
+Held keys/buttons are released on viewer focus loss, disconnect, or input timeout.
+See [remote input details and platform limits](docs/input.md).
+
 ## Low-bandwidth profile
 
 The default profile is capped at 15 frames per second and scales frames down
@@ -143,7 +160,8 @@ The output is `dist/rdc.exe` on Windows and `dist/rdc` on Linux.
 - Phase 4: timestamp-paced local video playback with pause/resume and resizing.
 - Phase 5: authenticated FastAPI signaling with host approval and session cleanup.
 - Phase 6: approved H.264 WebRTC screen sharing with a live viewer.
-- Not included yet: remote keyboard/mouse,
+- Phase 7: opt-in keyboard/mouse control over an ordered WebRTC data channel.
+- Not included yet: clipboard/file transfer,
   authentication service, or background service installation.
 
 The host must clearly show that screen sharing is active and require approval
