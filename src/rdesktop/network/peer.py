@@ -1,4 +1,4 @@
-"""One approved, receive-only viewer paired with a screen-sharing host."""
+"""One approved viewer paired with a screen-sharing host."""
 
 import asyncio
 import json
@@ -8,6 +8,7 @@ from typing import Any
 from aiortc import (
     MediaStreamTrack,
     RTCConfiguration,
+    RTCDataChannel,
     RTCPeerConnection,
     RTCRtpSender,
     RTCSessionDescription,
@@ -18,6 +19,7 @@ from av import VideoFrame
 from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed
 
+from rdesktop.control.input import InputBackend, InputReceiver, NativeInput
 from rdesktop.server.protocol import Answer, Ice, Offer
 
 from .capture import ScreenVideoTrack
@@ -47,7 +49,14 @@ class PeerSession:
         on_frame: Callable[[VideoFrame], None] | None = None,
         track_factory: Callable[[], ScreenVideoTrack] | None = None,
         connection_timeout: float = 45,
+        allow_control: bool = False,
+        input_factory: Callable[[], InputBackend] = NativeInput,
     ) -> None:
+        self.allow_control = allow_control
+        self.input_factory = input_factory
+        self._input: InputReceiver | None = None
+        self._channel: RTCDataChannel | None = None
+        self._last_input = 0.0
         self.host = host
         self.server = validate_url(server)
         if len(token) < 32:
@@ -77,6 +86,64 @@ class PeerSession:
         self._state = "new"
         self._closing = False
         self._received_video = False
+
+    def send_input(self, event: dict) -> bool:
+        channel = self._channel
+        if (
+            self.host
+            or self.stopped.is_set()
+            or channel is None
+            or channel.readyState != "open"
+        ):
+            return False
+        if channel.bufferedAmount > 65536:
+            self._fail(RuntimeError("Input connection congested; disconnecting."))
+            return False
+        channel.send(json.dumps(event))
+        return True
+
+    def _attach_input(self, channel) -> None:
+        if (
+            self._channel is not None
+            or channel.label != "rdc-input-v1"
+            or not channel.ordered
+            or channel.maxRetransmits is not None
+            or channel.maxPacketLifeTime is not None
+        ):
+            channel.close()
+            return
+        self._channel = channel
+
+        @channel.on("message")
+        def receive(raw):
+            if not self.host or self._input is None or self.stopped.is_set():
+                return
+            try:
+                self._input.receive(raw)
+                self._last_input = asyncio.get_running_loop().time()
+            except Exception as exc:  # noqa: BLE001 — stop session on backend errors
+                self._fail(RuntimeError(f"Remote input stopped: {exc}"))
+
+        @channel.on("close")
+        def closed():
+            self.stopped.set()
+            if self._input is not None:
+                try:
+                    self._input.release()
+                except Exception as exc:  # noqa: BLE001 — report cleanup errors
+                    self._fail(exc)
+
+    async def _input_watchdog(self) -> None:
+        while True:
+            await asyncio.sleep(1)
+            if self.host:
+                if (
+                    self._input is not None
+                    and asyncio.get_running_loop().time() - self._last_input > 3
+                ):
+                    self._input.release()
+            else:
+                self.send_input({"type": "heartbeat"})
 
     def _fail(self, error: BaseException) -> None:
         if not self._closing:
@@ -135,7 +202,10 @@ class PeerSession:
             self._fail(RuntimeError("No video received for 30 seconds."))
 
     async def _ask(self, name: str) -> None:
-        approved = await self.approve(name)
+        if self.allow_control and self.approve is request_approval:
+            approved = await request_approval(name, control=True)
+        else:
+            approved = await self.approve(name)
         await self._send({"type": "approve", "approved": approved})
         if not approved:
             self.report("Screen sharing request declined.")
@@ -205,6 +275,16 @@ class PeerSession:
                 self._source = self.track_factory()
                 await self._source.start()
                 self._spawn(self._watch_capture())
+                if self.allow_control:
+                    self._input = InputReceiver(
+                        self.input_factory(), self._source.bounds
+                    )
+                    self._attach_input(
+                        self._pc.createDataChannel("rdc-input-v1", ordered=True)
+                    )
+                    self.report(
+                        "REMOTE KEYBOARD/MOUSE CONTROL ACTIVE — Ctrl+C revokes access."
+                    )
                 self._pc.addTransceiver(self._source, direction="sendonly")
                 self._prefer_h264()
                 self.report("SCREEN SHARING ACTIVE — Ctrl+C ends sharing.")
@@ -277,6 +357,13 @@ class PeerSession:
             elif pc.connectionState == "closed":
                 self.stopped.set()
 
+        @pc.on("datachannel")
+        def received_channel(channel):
+            if self.host or self._state not in {"approved", "negotiated"}:
+                channel.close()
+                return
+            self._attach_input(channel)
+
         @pc.on("track")
         def received_track(track: MediaStreamTrack) -> None:
             if self.host or track.kind != "video" or self._received_video:
@@ -309,6 +396,7 @@ class PeerSession:
                     }
                 )
                 self._spawn(self._heartbeat())
+                self._spawn(self._input_watchdog())
                 self._spawn(self._receive())
                 if display is not None:
 
@@ -328,10 +416,14 @@ class PeerSession:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             try:
-                await pc.close()
+                if self._input is not None:
+                    self._input.release()
             finally:
-                if self._source is not None:
-                    await self._source.aclose()
+                try:
+                    await pc.close()
+                finally:
+                    if self._source is not None:
+                        await self._source.aclose()
             self.report(
                 "Screen sharing stopped." if self.host else "Viewer disconnected."
             )
