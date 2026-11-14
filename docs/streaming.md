@@ -2,8 +2,8 @@
 
 The host shares one selected monitor (or the combined desktop) with one viewer.
 Video is H.264 over WebRTC, up to 1280×720 at 15 FPS. The CLI manages the session;
-the viewer opens a resizable Tkinter window. No keyboard/mouse control or audio
-is implemented.
+the viewer opens a resizable Tkinter window. Optional keyboard/mouse control is
+described in [the input guide](input.md). No audio is implemented.
 
 ## Install on all computers
 
@@ -129,7 +129,7 @@ WebRTC encrypts media with DTLS/SRTP; plain `ws://` signaling is not encrypted.
 - Connection setup times out after 45 seconds; a viewer receiving no video for
   30 seconds stops. Failures close capture, peer connections and background tasks.
 - CLI approval and connection state stay visible in the host terminal.
-- No auto-reconnect, unattended access, remote input, or persistent pairing.
+- No auto-reconnect, unattended access or persistent pairing.
 - Build standalone executables separately on each OS using the README command;
   Windows packaging and cross-machine GUI operation require manual platform testing.
 
