@@ -1,13 +1,17 @@
 """Live video window, updated on the asyncio/main thread without frame queues."""
 
 import asyncio
+from collections.abc import Callable
 from typing import Any
 
 from av import VideoFrame
 
+from rdesktop.control.input import ViewerInput
+
 
 class LiveViewer:
     def __init__(self) -> None:
+        self.send_input: Callable[[dict], bool] = lambda event: False
         self._latest: VideoFrame | None = None
 
     def show(self, frame: VideoFrame) -> None:
@@ -37,6 +41,16 @@ class LiveViewer:
         label.pack(fill="both", expand=True)
         root.protocol("WM_DELETE_WINDOW", stopped.set)
         root.bind("<Escape>", lambda event: stopped.set())
+        controls = ViewerInput(lambda event: self.send_input(event))
+        root.bind("<FocusOut>", controls.reset)
+        root.bind("<KeyPress>", lambda event: controls.key(event, True))
+        root.bind("<KeyRelease>", lambda event: controls.key(event, False))
+        root.bind("<Motion>", controls.move)
+        root.bind("<ButtonPress>", lambda event: controls.button(event, True))
+        root.bind("<ButtonRelease>", lambda event: controls.button(event, False))
+        root.bind("<MouseWheel>", controls.scroll)
+        root.bind("<Button-4>", controls.scroll)
+        root.bind("<Button-5>", controls.scroll)
         image: Any = None
         photo: Any = None
         previous_size = (0, 0)
@@ -50,14 +64,22 @@ class LiveViewer:
                 if self._latest is not None:
                     image = self._latest.to_image()
                     self._latest = None
-                    root.title("rdc — LIVE screen view | Escape: disconnect")
+                    mode = (
+                        "CONTROL ENABLED"
+                        if self.send_input({"type": "heartbeat"})
+                        else "VIEW ONLY"
+                    )
+                    root.title(f"rdc — LIVE | {mode} | Escape: disconnect")
                 if image is not None and (changed or size != previous_size):
                     fitted = image.copy()
                     fitted.thumbnail(size, Image.Resampling.BILINEAR)
+                    controls.size = fitted.size
+                    controls.window = size
                     photo = ImageTk.PhotoImage(fitted, master=root)
                     label.configure(image=photo)
                     previous_size = size
                 await asyncio.sleep(1 / 60)
         finally:
+            controls.reset()
             root.destroy()
             self._latest = None
