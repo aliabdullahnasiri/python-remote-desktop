@@ -56,7 +56,7 @@ def ice_configuration() -> RTCConfiguration:
     return RTCConfiguration(iceServers=servers)
 
 
-async def request_approval(name: str) -> bool:
+async def request_approval(name: str, *, control: bool = False) -> bool:
     """Do not let a blocked terminal read prevent network shutdown."""
     loop = asyncio.get_running_loop()
     answer: asyncio.Future[bool] = loop.create_future()
@@ -66,10 +66,16 @@ async def request_approval(name: str) -> bool:
         if not answer.done():
             answer.set_result(value)
 
+    access = (
+        "see your screen and CONTROL your keyboard/mouse"
+        if control
+        else "see your screen"
+    )
+
     def read() -> None:
         try:
             approved = (
-                input(f"Allow viewer {safe_name!r} to see your screen? [y/N]: ")
+                input(f"Allow viewer {safe_name!r} to {access}? [y/N]: ")
                 .strip()
                 .lower()
                 == "y"
