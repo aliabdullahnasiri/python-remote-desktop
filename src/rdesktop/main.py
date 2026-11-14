@@ -250,6 +250,7 @@ def serve(
 def _run_stream(
     *,
     hosting: bool,
+    allow_control: bool = False,
     server: str,
     monitor: int = 1,
     fps: int = 15,
@@ -279,6 +280,7 @@ def _run_stream(
         viewer = None if hosting else LiveViewer()
         session = PeerSession(
             host=hosting,
+            allow_control=allow_control,
             server=server,
             token=token,
             configuration=configuration,
@@ -290,6 +292,8 @@ def _run_stream(
             report=lambda message: console.print(message, markup=False),
             on_frame=viewer.show if viewer is not None else None,
         )
+        if viewer is not None:
+            viewer.send_input = session.send_input
         asyncio.run(session.run(viewer.run if viewer is not None else None))
     except KeyboardInterrupt:
         console.print("Session stopped.")
@@ -307,9 +311,18 @@ def host(
         int, typer.Option(min=0, help="Monitor index; 0 shares all monitors.")
     ] = 1,
     fps: Annotated[int, typer.Option(min=1, max=15, help="Maximum capture FPS.")] = 15,
+    allow_control: Annotated[
+        bool, typer.Option(help="Include keyboard/mouse control in host approval.")
+    ] = False,
 ) -> None:
     """Share your screen after approving one viewer in this terminal."""
-    _run_stream(hosting=True, server=server, monitor=monitor, fps=fps)
+    _run_stream(
+        hosting=True,
+        server=server,
+        monitor=monitor,
+        fps=fps,
+        allow_control=allow_control,
+    )
 
 
 @app.command()
